@@ -2,24 +2,32 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { tools } from "@/lib/tools";
 
-const API_PROVIDER = process.env.API_PROVIDER || "anthropic"; // "anthropic" | "openrouter"
-const MODEL = process.env.MODEL || "claude-sonnet-4-5-20250514";
+const API_PROVIDER = (process.env.API_PROVIDER || "anthropic").toLowerCase();
 
-function getAnthropicClient() {
-  return new Anthropic();
+function getModel(): string {
+  if (process.env.MODEL) return process.env.MODEL;
+  // Sensible defaults per provider
+  return API_PROVIDER === "openrouter"
+    ? "anthropic/claude-sonnet-4-5"
+    : "claude-sonnet-4-5-20250514";
 }
 
 async function callAnthropic(prompt: string) {
-  const client = getAnthropicClient();
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw new Error("ANTHROPIC_API_KEY is not set. Add it in Railway env vars.");
+  }
+
+  const client = new Anthropic({ apiKey });
   const message = await client.messages.create({
-    model: MODEL,
+    model: getModel(),
     max_tokens: 1024,
     messages: [{ role: "user", content: prompt }],
   });
 
   const textBlock = message.content.find((block) => block.type === "text");
   if (!textBlock || textBlock.type !== "text") {
-    throw new Error("No text response from model");
+    throw new Error("No text response from Anthropic");
   }
   return textBlock.text;
 }
@@ -27,7 +35,9 @@ async function callAnthropic(prompt: string) {
 async function callOpenRouter(prompt: string) {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
-    throw new Error("OPENROUTER_API_KEY is not set");
+    throw new Error(
+      "OPENROUTER_API_KEY is not set. Add it in Railway env vars."
+    );
   }
 
   const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -35,11 +45,13 @@ async function callOpenRouter(prompt: string) {
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
-      "HTTP-Referer": process.env.SITE_URL || "https://pionex-growth-lab.up.railway.app",
+      "HTTP-Referer":
+        process.env.SITE_URL ||
+        "https://pionex-growth-lab-production.up.railway.app",
       "X-Title": "Pionex Growth Lab",
     },
     body: JSON.stringify({
-      model: MODEL,
+      model: getModel(),
       max_tokens: 1024,
       messages: [{ role: "user", content: prompt }],
     }),
@@ -47,28 +59,51 @@ async function callOpenRouter(prompt: string) {
 
   if (!res.ok) {
     const err = await res.text();
-    throw new Error(`OpenRouter API error: ${res.status} — ${err}`);
+    throw new Error(`OpenRouter error ${res.status}: ${err}`);
   }
 
   const data = await res.json();
+
+  if (data.error) {
+    throw new Error(
+      `OpenRouter: ${data.error.message || JSON.stringify(data.error)}`
+    );
+  }
+
   const content = data.choices?.[0]?.message?.content;
   if (!content) {
-    throw new Error("No text response from OpenRouter");
+    throw new Error(
+      "Empty response from OpenRouter. Response: " +
+        JSON.stringify(data).slice(0, 200)
+    );
   }
   return content as string;
 }
 
-function parseResponse(raw: string) {
+function extractJSON(raw: string) {
   let cleaned = raw.trim();
-  if (cleaned.startsWith("```")) {
-    cleaned = cleaned.replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "");
+
+  // Strip markdown code fences
+  cleaned = cleaned.replace(/^```(?:json)?\s*/m, "").replace(/\s*```\s*$/m, "");
+  cleaned = cleaned.trim();
+
+  // Try parsing directly
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    // Try to extract JSON object from the text
+    const match = cleaned.match(/\{[\s\S]*\}/);
+    if (match) {
+      return JSON.parse(match[0]);
+    }
+    throw new Error("Could not parse JSON from model response");
   }
-  return JSON.parse(cleaned);
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const { tool, input } = await req.json();
+    const body = await req.json();
+    const { tool, input } = body;
 
     if (!tool || !input) {
       return NextResponse.json(
@@ -84,12 +119,16 @@ export async function POST(req: NextRequest) {
 
     const prompt = toolConfig.promptTemplate(input);
 
+    console.log(
+      `[generate] provider=${API_PROVIDER} model=${getModel()} tool=${tool}`
+    );
+
     const raw =
       API_PROVIDER === "openrouter"
         ? await callOpenRouter(prompt)
         : await callAnthropic(prompt);
 
-    const parsed = parseResponse(raw);
+    const parsed = extractJSON(raw);
     return NextResponse.json(parsed);
   } catch (err: unknown) {
     const message =

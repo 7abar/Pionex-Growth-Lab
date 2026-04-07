@@ -245,16 +245,24 @@ export default function Home() {
         body: JSON.stringify({ tool: tool.id, input }),
       });
 
-      const data = await res.json();
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        const text = await res.text();
+        throw new Error(`Server returned non-JSON (${res.status}): ${text.slice(0, 150)}`);
+      }
+
       if (data.error) {
         setErrors((prev) => ({ ...prev, [activeTab]: data.error }));
       } else {
         setResults((prev) => ({ ...prev, [activeTab]: data }));
       }
-    } catch {
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Network error. Please try again.";
       setErrors((prev) => ({
         ...prev,
-        [activeTab]: "Network error. Please try again.",
+        [activeTab]: msg,
       }));
     } finally {
       setLoading((prev) => ({ ...prev, [activeTab]: false }));
