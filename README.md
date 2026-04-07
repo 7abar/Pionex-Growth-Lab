@@ -2,7 +2,7 @@
 
 Four AI-powered tools I'd ship in week one as your AI-Powered Growth Manager.
 
-Built with Next.js 14, TypeScript, Tailwind CSS, and the Anthropic Claude API.
+Built with Next.js 14, TypeScript, Tailwind CSS, and the Anthropic Claude API (or any model via OpenRouter).
 
 ## Tools
 
@@ -16,7 +16,7 @@ Built with Next.js 14, TypeScript, Tailwind CSS, and the Anthropic Claude API.
 ```bash
 npm install
 cp .env.example .env
-# Add your ANTHROPIC_API_KEY to .env
+# Edit .env — set your API provider, model, and API key
 npm run dev
 ```
 
@@ -26,12 +26,27 @@ Open [http://localhost:3000](http://localhost:3000).
 
 1. Push this repo to GitHub
 2. Create a new project on [Railway](https://railway.app) → **Deploy from GitHub**
-3. Add environment variable: `ANTHROPIC_API_KEY`
+3. Add environment variables (see table below)
 4. Railway auto-detects Next.js, builds, and deploys
 5. Go to **Settings → Domains** to generate a public URL
 
 ## Environment Variables
 
-| Variable | Description |
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `API_PROVIDER` | No | `anthropic` | `anthropic` or `openrouter` |
+| `MODEL` | No | `claude-sonnet-4-5-20250514` | Model ID to use (provider-specific) |
+| `ANTHROPIC_API_KEY` | If provider = `anthropic` | — | Anthropic API key |
+| `OPENROUTER_API_KEY` | If provider = `openrouter` | — | OpenRouter API key |
+| `SITE_URL` | No | — | Your deployed URL (used for OpenRouter rankings) |
+
+### OpenRouter Model Examples
+
+| Model | `MODEL` value |
 |---|---|
-| `ANTHROPIC_API_KEY` | Your Anthropic API key |
+| Claude Sonnet 4.5 | `anthropic/claude-sonnet-4-5` |
+| GPT-4o | `openai/gpt-4o` |
+| Gemini 2.5 Pro | `google/gemini-2.5-pro` |
+| Llama 4 Maverick | `meta-llama/llama-4-maverick` |
+
+See [openrouter.ai/models](https://openrouter.ai/models) for full list.
