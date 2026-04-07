@@ -8,9 +8,8 @@ import {
   FlaskConical,
   Loader2,
   ArrowRight,
-  Mail,
+  Twitter,
   Github,
-  Linkedin,
 } from "lucide-react";
 
 const TOOLS = [
@@ -408,25 +407,22 @@ export default function Home() {
             </h3>
             <div className="space-y-2 text-sm">
               <a
-                href="mailto:hire@example.com"
+                href="https://x.com/7abar_eth"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="flex items-center gap-2 text-stone-400 hover:text-amber-500 transition-colors"
               >
-                <Mail size={14} />
-                hire@example.com
+                <Twitter size={14} />
+                @7abar_eth
               </a>
               <a
-                href="https://github.com"
+                href="https://github.com/7abar/Pionex-Growth-Lab"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="flex items-center gap-2 text-stone-400 hover:text-amber-500 transition-colors"
               >
                 <Github size={14} />
                 GitHub
-              </a>
-              <a
-                href="https://linkedin.com"
-                className="flex items-center gap-2 text-stone-400 hover:text-amber-500 transition-colors"
-              >
-                <Linkedin size={14} />
-                LinkedIn
               </a>
             </div>
           </div>
