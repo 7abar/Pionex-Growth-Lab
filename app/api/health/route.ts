@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 
 const FREE_MODELS = [
-  "qwen/qwen3-235b-a22b:free",
-  "qwen/qwen3-30b-a3b:free",
-  "deepseek/deepseek-chat-v3-0324:free",
-  "meta-llama/llama-4-maverick:free",
+  "openrouter/free",
+  "qwen/qwen3-coder:free",
+  "qwen/qwen-2.5-coder-32b-instruct:free",
+  "qwen/qwen2.5-vl-3b-instruct:free",
+  "meta-llama/llama-3.3-70b-instruct:free",
   "google/gemma-3-27b-it:free",
   "mistralai/mistral-small-3.1-24b-instruct:free",
+  "nvidia/llama-3.1-nemotron-70b-instruct:free",
 ];
 
 export async function GET() {
