@@ -4,12 +4,25 @@ import { tools } from "@/lib/tools";
 
 const API_PROVIDER = (process.env.API_PROVIDER || "anthropic").toLowerCase();
 
-function getModel(): string {
-  if (process.env.MODEL) return process.env.MODEL;
-  // Sensible defaults per provider
-  return API_PROVIDER === "openrouter"
-    ? "anthropic/claude-sonnet-4-5"
-    : "claude-sonnet-4-5-20250514";
+// Free models on OpenRouter, ordered by preference
+const FREE_MODELS = [
+  "qwen/qwen3-235b-a22b:free",
+  "qwen/qwen3-30b-a3b:free",
+  "deepseek/deepseek-chat-v3-0324:free",
+  "meta-llama/llama-4-maverick:free",
+  "google/gemma-3-27b-it:free",
+  "mistralai/mistral-small-3.1-24b-instruct:free",
+];
+
+function getModels(): string[] {
+  // If user explicitly set a model, use that first, then fallback to free list
+  if (process.env.MODEL) {
+    return [process.env.MODEL, ...FREE_MODELS];
+  }
+  if (API_PROVIDER === "openrouter") {
+    return FREE_MODELS;
+  }
+  return ["claude-sonnet-4-5-20250514"];
 }
 
 async function callAnthropic(prompt: string) {
@@ -20,7 +33,7 @@ async function callAnthropic(prompt: string) {
 
   const client = new Anthropic({ apiKey });
   const message = await client.messages.create({
-    model: getModel(),
+    model: getModels()[0],
     max_tokens: 1024,
     messages: [{ role: "user", content: prompt }],
   });
@@ -32,14 +45,11 @@ async function callAnthropic(prompt: string) {
   return textBlock.text;
 }
 
-async function callOpenRouter(prompt: string) {
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) {
-    throw new Error(
-      "OPENROUTER_API_KEY is not set. Add it in Railway env vars."
-    );
-  }
-
+async function callOpenRouterWithModel(
+  prompt: string,
+  model: string,
+  apiKey: string
+): Promise<string> {
   const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -51,7 +61,7 @@ async function callOpenRouter(prompt: string) {
       "X-Title": "Pionex Growth Lab",
     },
     body: JSON.stringify({
-      model: getModel(),
+      model,
       max_tokens: 1024,
       messages: [{ role: "user", content: prompt }],
     }),
@@ -59,32 +69,62 @@ async function callOpenRouter(prompt: string) {
 
   if (!res.ok) {
     const err = await res.text();
-    throw new Error(`OpenRouter error ${res.status}: ${err}`);
+    throw new Error(`[${model}] HTTP ${res.status}: ${err}`);
   }
 
   const data = await res.json();
 
   if (data.error) {
     throw new Error(
-      `OpenRouter: ${data.error.message || JSON.stringify(data.error)}`
+      `[${model}] ${data.error.message || JSON.stringify(data.error)}`
     );
   }
 
   const content = data.choices?.[0]?.message?.content;
   if (!content) {
     throw new Error(
-      "Empty response from OpenRouter. Response: " +
-        JSON.stringify(data).slice(0, 200)
+      `[${model}] Empty response: ${JSON.stringify(data).slice(0, 200)}`
     );
   }
   return content as string;
+}
+
+async function callOpenRouter(prompt: string): Promise<string> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) {
+    throw new Error(
+      "OPENROUTER_API_KEY is not set. Add it in Railway env vars."
+    );
+  }
+
+  const models = getModels();
+  const errors: string[] = [];
+
+  for (const model of models) {
+    try {
+      console.log(`[generate] trying model: ${model}`);
+      const result = await callOpenRouterWithModel(prompt, model, apiKey);
+      console.log(`[generate] success with model: ${model}`);
+      return result;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[generate] failed ${model}: ${msg}`);
+      errors.push(msg);
+    }
+  }
+
+  throw new Error(
+    `All models failed.\n${errors.map((e) => `  - ${e}`).join("\n")}`
+  );
 }
 
 function extractJSON(raw: string) {
   let cleaned = raw.trim();
 
   // Strip markdown code fences
-  cleaned = cleaned.replace(/^```(?:json)?\s*/m, "").replace(/\s*```\s*$/m, "");
+  cleaned = cleaned
+    .replace(/^```(?:json)?\s*/m, "")
+    .replace(/\s*```\s*$/m, "");
   cleaned = cleaned.trim();
 
   // Try parsing directly
@@ -120,7 +160,7 @@ export async function POST(req: NextRequest) {
     const prompt = toolConfig.promptTemplate(input);
 
     console.log(
-      `[generate] provider=${API_PROVIDER} model=${getModel()} tool=${tool}`
+      `[generate] provider=${API_PROVIDER} models=${getModels().join(", ")} tool=${tool}`
     );
 
     const raw =
